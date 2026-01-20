@@ -1,60 +1,34 @@
 #!/bin/bash
 
-# PostgreSQL command shortcut (quiet output, pipe-delimited)
-DB_CMD="psql -U freecodecamp -d periodic_table -t -A -c"
+PSQL="psql --username=freecodecamp --dbname=periodic_table -t --no-align -c"
 
-# Ensure an argument is passed to the script
-if [[ $# -eq 0 ]]; then
-  echo "You must supply an element name, symbol, or atomic number."
-  exit 1
+if [[ -z $1 ]]
+then
+  echo "Please provide an element as an argument."
+  exit
 fi
 
-INPUT="$1"
-
-# Decide query based on whether input is numeric
-if [[ "$INPUT" =~ ^[0-9]+$ ]]; then
-  QUERY_RESULT=$($DB_CMD "
-    SELECT e.atomic_number,
-           e.name,
-           e.symbol,
-           t.type,
-           p.atomic_mass,
-           p.melting_point_celsius,
-           p.boiling_point_celsius
-    FROM elements e
-    JOIN properties p ON e.atomic_number = p.atomic_number
-    JOIN types t ON p.type_id = t.type_id
-    WHERE e.atomic_number = $INPUT;
-  ")
+if [[ $1 =~ ^[0-9]+$ ]]
+then
+  element_data=$($PSQL "SELECT atomic_number, name, symbol, type, atomic_mass, melting_point_celsius, boiling_point_celsius 
+  FROM elements 
+  INNER JOIN properties USING(atomic_number) 
+  INNER JOIN types USING(type_id)
+  WHERE atomic_number = $1")
 else
-  QUERY_RESULT=$($DB_CMD "
-    SELECT e.atomic_number,
-           e.name,
-           e.symbol,
-           t.type,
-           p.atomic_mass,
-           p.melting_point_celsius,
-           p.boiling_point_celsius
-    FROM elements e
-    JOIN properties p ON e.atomic_number = p.atomic_number
-    JOIN types t ON p.type_id = t.type_id
-    WHERE e.symbol = '$INPUT'
-       OR e.name = '$INPUT';
-  ")
+  element_data=$($PSQL "SELECT atomic_number, name, symbol, type, atomic_mass, melting_point_celsius, boiling_point_celsius 
+  FROM elements 
+  INNER JOIN properties USING(atomic_number) 
+  INNER JOIN types USING(type_id)
+  WHERE symbol = '$1' OR name = '$1'")
 fi
 
-# Handle case where no matching element is found
-if [[ -z "$QUERY_RESULT" ]]; then
-  echo "Element not found in the periodic table database."
-  exit 1
+if [[ -z $element_data ]]
+then
+  echo "I could not find that element in the database."
+  exit
 fi
 
-# Break the query output into individual variables
-IFS="|" read -r NUM NAME SYMBOL CATEGORY WEIGHT MELTING BOILING <<< "$QUERY_RESULT"
+IFS="|" read atomic_number element_name element_symbol element_type atomic_mass melt_point boil_point <<< "$element_data"
 
-# Display formatted element information
-echo "Element #$NUM is $NAME ($SYMBOL)."
-echo "Category: $CATEGORY"
-echo "Atomic mass: $WEIGHT amu"
-echo "Melting point: $MELTING °C"
-echo "Boiling point: $BOILING °C"
+echo "The element with atomic number $atomic_number is $element_name ($element_symbol). It's a $element_type, with a mass of $atomic_mass amu. $element_name has a melting point of $melt_point celsius and a boiling point of $boil_point celsius."
